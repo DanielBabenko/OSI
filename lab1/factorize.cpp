@@ -1,6 +1,7 @@
 #include <iostream>
 #include <chrono>
 #include <cmath>
+#include <thread>
 
 using namespace std;
 
@@ -36,7 +37,8 @@ int main(int argc, char* argv[]) {
 
     auto start = chrono::high_resolution_clock::now();
     for (int i = 0; i < repetitions; ++i) {
-        factorize(num);
+        thread t(factorize, num);
+        t.join();
     }
     auto end = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end - start).count();
