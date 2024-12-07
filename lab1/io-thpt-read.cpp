@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
         while (in.read(buffer, block_size)) {
             cout << "Read: ";
             for (int j = 0; j < 16 && j < block_size; ++j) {
-                printf("%02X ", (unsigned char)buffer[j]);
+                cout << buffer[j];
             }
             cout << endl;
         }
