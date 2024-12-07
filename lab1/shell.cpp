@@ -42,6 +42,13 @@ void execute_command(string command){
     si.cb = sizeof(si);
     memset(&pi, 0, sizeof(pi));
     
+    HMODULE hKernel32 = GetModuleHandle("Kernel32.dll");
+    
+    if (!hKernel32) {
+        printf("Error: Failed to get handle for Kernel32.dll\n");
+        return;
+    }
+    
     size_t spacePos = command.find(' ');
     string programName = (spacePos == string::npos) ? command : command.substr(0, spacePos);
     string arguments = (spacePos == string::npos) ? "" : command.substr(spacePos + 1);
@@ -66,19 +73,19 @@ void execute_command(string command){
 
     auto startTime = high_resolution_clock::now();
     int result;
-    
-    result = CreateProcess(
-            programName.c_str(),
-            cmd,
-            NULL,
-            NULL,
-            FALSE,
-            0,
-            NULL,
-            NULL,
-            &si,
-            &pi
-    );
+
+        result = CreateProcess(
+                programName.c_str(),
+                cmd,
+                NULL,
+                NULL,
+                FALSE,
+                0,
+                NULL,
+                NULL,
+                &si,
+                &pi
+        );
 
     WaitForSingleObject(pi.hProcess, INFINITE);
     auto endTime = high_resolution_clock::now();
