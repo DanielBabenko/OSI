@@ -1,6 +1,8 @@
 #include <iostream>
 #include <fstream>
 #include <chrono>
+#include <vector>
+#include <numeric>
 #include <windows.h>
 #include <filesystem> // for exists
 
@@ -13,6 +15,15 @@ const long long FILE_SIZE = 1024 * 1024 * 1024; //1GB
 
 auto measure_time(auto start, auto end) {
   return chrono::duration_cast<chrono::milliseconds>(end - start).count();
+}
+
+double calculateAverage(const vector<double>& data, int repetitions) {
+    if (data.empty()) {
+        return 0.0;
+    }
+
+    double sum = accumulate(data.begin(), data.end(), 0.0);
+    return sum / repetitions;
 }
 
 int main(int argc, char* argv[]) {
@@ -31,27 +42,13 @@ int main(int argc, char* argv[]) {
 
 
     int block_size = 1024;
+    vector<double> throughputs(repetitions);
     cout << "Block size: " << block_size << " bytes" << endl;
     cout << "Reading from file: " << filename << endl;
+    
+    DWORD dwFlags = FILE_FLAG_NO_BUFFERING;
 
     auto start = chrono::high_resolution_clock::now();
-//    for (int i = 0; i < repetitions; ++i) {
-//        ifstream in(filename, ios::binary);
-//        if (!in.is_open()) {
-//            cerr << "Error opening file: " << filename << endl;
-//            return 1;
-//        }
-//        char buffer[block_size];
-//        in.seekg(0, ios::beg);
-//        while (in.read(buffer, block_size)) {
-//            cout << "Read: ";
-//            for (int j = 0; j < 16 && j < block_size; ++j) {
-//                cout << buffer[j];
-//            }
-//            cout << endl;
-//        }
-//        in.close();
-//    }
 
         HMODULE hKernel32 = GetModuleHandle("Kernel32.dll");
     
@@ -67,8 +64,20 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             
+            	LARGE_INTEGER file_size;
+                if (!GetFileSizeEx(hFile, &file_size)) {
+                    cerr << "Error getting file size: " << GetLastError() << endl;
+                    CloseHandle(hFile);
+                    return 1;
+                }
+            
             char buffer[block_size];
             DWORD bytesRead;
+            long long total_bytes_read = 0;
+            
+            ULARGE_INTEGER timeStart;
+            timeStart.QuadPart = GetTickCount64();
+            
             while (ReadFile(hFile, buffer, block_size, &bytesRead, nullptr)) {
                 if (bytesRead == 0) break;
                 cout << "Read: ";
@@ -80,8 +89,25 @@ int main(int argc, char* argv[]) {
             }
 
             CloseHandle(hFile);
-        }
+            ULARGE_INTEGER timeEnd;
+            timeEnd.QuadPart = GetTickCount64();
+            
+//             double timeElapsed = (timeEnd.QuadPart - timeStart.QuadPart) * 0.001;
+//             double throughput = (double)file_size.QuadPart / timeElapsed;
+//             throughputs.push_back(throughput);
+//             cout << "Throughput for repetition " << i + 1 << ": " << fixed << setprecision(2) << throughput << " B/s" << endl;
+            double timeElapsed = (double)(timeEnd.QuadPart - timeStart.QuadPart) / 1000.0; // секунды
+            double throughput = (double)file_size.QuadPart / timeElapsed; // байты/секунду
+            double throughputKB = throughput / 1024.0; // килобайты/секунду
+            double throughputMB = throughput / (1024.0 * 1024.0); // мегабайты/секунду
 
+            throughputs.push_back(throughput);
+            cout << "Throughput for repetition " << i + 1 << ": " << fixed << setprecision(2) 
+                 << throughput << " B/s, " << throughputKB << " KB/s, " << throughputMB << " MB/s" << endl;
+}
+    double averageThroughput = calculateAverage(throughputs, repetitions);
+    cout << "Average Throughput: " << averageThroughput << " B/s" << endl;
+    
     auto end = chrono::high_resolution_clock::now();
     auto duration = measure_time(start, end);
 
