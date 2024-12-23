@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int repetitions = stoi(argv[1]);
+    long long repetitions = stoi(argv[1]);
     string filename = argv[2];
 
     if (!fs::exists(filename)) {
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
         }
         
         for (int i = 0; i < repetitions; ++i) {
-            HANDLE hFile = CreateFileA(filename.c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            HANDLE hFile = CreateFileA(filename.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (hFile == INVALID_HANDLE_VALUE) {
                 cerr << "Error opening file: " << GetLastError() << endl;
                 return 1;
@@ -74,39 +74,28 @@ int main(int argc, char* argv[]) {
             char buffer[block_size];
             DWORD bytesRead;
             long long total_bytes_read = 0;
+            int hamza = 0;
             
             ULARGE_INTEGER timeStart;
             timeStart.QuadPart = GetTickCount64();
             
             while (ReadFile(hFile, buffer, block_size, &bytesRead, nullptr)) {
                 if (bytesRead == 0) break;
-                cout << "Read: ";
-                for (int j = 0; j < bytesRead; ++j) {
-                    cout << buffer[j];
-                }
-                cout << endl;
-
             }
 
             CloseHandle(hFile);
             ULARGE_INTEGER timeEnd;
             timeEnd.QuadPart = GetTickCount64();
             
-//             double timeElapsed = (timeEnd.QuadPart - timeStart.QuadPart) * 0.001;
-//             double throughput = (double)file_size.QuadPart / timeElapsed;
-//             throughputs.push_back(throughput);
-//             cout << "Throughput for repetition " << i + 1 << ": " << fixed << setprecision(2) << throughput << " B/s" << endl;
-            double timeElapsed = (double)(timeEnd.QuadPart - timeStart.QuadPart) / 1000.0; // секунды
-            double throughput = (double)file_size.QuadPart / timeElapsed; // байты/секунду
-            double throughputKB = throughput / 1024.0; // килобайты/секунду
-            double throughputMB = throughput / (1024.0 * 1024.0); // мегабайты/секунду
+            double timeElapsed = (double)(timeEnd.QuadPart - timeStart.QuadPart) / 1000.0;
+            double throughput = (double)file_size.QuadPart / timeElapsed;
+            double throughputMB = throughput / (1024.0 * 1024.0);
 
-            throughputs.push_back(throughput);
-            cout << "Throughput for repetition " << i + 1 << ": " << fixed << setprecision(2) 
-                 << throughput << " B/s, " << throughputKB << " KB/s, " << throughputMB << " MB/s" << endl;
+            throughputs.push_back(throughputMB);
+            cout << "Throughput for repetition " << i + 1 << ": " << fixed << setprecision(2) << throughputMB << " MB/s" << endl;
 }
     double averageThroughput = calculateAverage(throughputs, repetitions);
-    cout << "Average Throughput: " << averageThroughput << " B/s" << endl;
+    cout << "Average Throughput: " << averageThroughput << " MB/s" << endl;
     
     auto end = chrono::high_resolution_clock::now();
     auto duration = measure_time(start, end);
