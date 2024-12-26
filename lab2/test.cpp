@@ -8,10 +8,6 @@ using namespace std;
 #define BLOCK_SIZE 512
 
 int main() {
-//    int result = add(8, 3);
-//    cout << "8 + 3 = " << result << std::endl;
-//    greet("Daniel");
-    
     // 1. Инициализация кэша
     const char* disk_file = "disk.bin"; // Имя файла, имитирующего диск
     const size_t cache_capacity = 3;
