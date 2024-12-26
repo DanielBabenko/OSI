@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <iostream>
+#include <vector>
 #include "cache_lib.h"
 
 using namespace std;
@@ -254,4 +255,58 @@ void cache_destroy() {
     CloseHandle(cache->mutex);
      free(cache);
      cache = nullptr;
+}
+
+typedef struct OpenFileEntry {
+    HANDLE file_handle;
+    Cache* cache;
+    int file_id;
+    const char* file_path;
+    off_t file_offset;
+} OpenFileEntry;
+
+vector<OpenFileEntry> open_files;
+int file_id_counter = 0;
+
+int lab2_open(const char* path) {
+        // Проверяем, не открыт ли уже этот файл
+        for(const auto& file : open_files)
+        {
+            if (strcmp(file.file_path, path) == 0)
+            return file.file_id;
+        }
+
+        HANDLE file_handle = CreateFileA(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+          if(file_handle == INVALID_HANDLE_VALUE)
+          {
+            cerr << "Error opening file: " << GetLastError() << endl;
+            return -1;
+          }
+
+        // Создаем новую запись
+        OpenFileEntry new_file;
+        new_file.file_handle = file_handle;
+        new_file.cache = cache; // Передаем указатель на кэш
+        new_file.file_id = file_id_counter++;
+        new_file.file_path = path;
+
+        open_files.push_back(new_file);
+        return new_file.file_id;
+
+}
+
+int lab2_close(int fd) {
+        for (auto it = open_files.begin(); it != open_files.end(); ++it)
+        {
+            if (it->file_id == fd)
+            {
+                 if (!CloseHandle(it->file_handle)) {
+                     return -1;
+                } else {
+                    open_files.erase(it);
+                    return fd;
+                }
+             }
+        }
+        return -1;
 }
