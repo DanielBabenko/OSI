@@ -14,7 +14,7 @@ int main() {
     
     // 1. Инициализация кэша
     const char* disk_file = "disk.bin"; // Имя файла, имитирующего диск
-    const size_t cache_capacity = 10;
+    const size_t cache_capacity = 3;
 
     // Create dummy disk file
     ofstream disk_stream(disk_file, ios::binary);
@@ -27,12 +27,11 @@ int main() {
         disk_stream.close();
     }
 
-
     if (!cache_init(cache_capacity, disk_file)) {
         cerr << "Error initializing cache." << std::endl;
         return 1;
     }
-
+    
     // 2. Тестирование cache_read
     char buffer[BLOCK_SIZE];
     bool success;
@@ -135,6 +134,21 @@ int main() {
         cout << "Read block 1 from cache (after write): " << buffer << endl;
       } else {
         cerr << "Error reading block 1." << endl;
+      }
+     
+     sprintf_s(buffer, BLOCK_SIZE, "PEnskoy Krutoy"); 
+     success = cache_write(5, buffer); // Записываем новый блок 1
+     if (success) {
+         cout << "Write block 5 successfully." << endl;
+     } else {
+         cerr << "Error writing block 5" << endl;
+     }
+
+    success = cache_read(5, buffer);
+      if (success) {
+        cout << "Read block 5 from cache (after write): " << buffer << endl;
+      } else {
+        cerr << "Error reading block 5." << endl;
       }
 
     // 3. Очистка кэша
