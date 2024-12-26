@@ -9,137 +9,148 @@ using namespace std;
 
 int main() {
     // 1. Инициализация кэша
-    const char* disk_file = "disk.bin";
+    const char* disk_file = "disk.bin"; // Имя файла, имитирующего диск
     const size_t cache_capacity = 3;
-    std::ofstream disk_stream(disk_file, std::ios::binary);
+
+    // Create dummy disk file
+    ofstream disk_stream(disk_file, ios::binary);
     if (disk_stream.is_open()) {
         char buffer[BLOCK_SIZE];
         for (int i = 0; i < 10; i++) {
-            sprintf_s(buffer, BLOCK_SIZE, "Data for block %d", i);
-            disk_stream.write(buffer, BLOCK_SIZE);
+            sprintf_s(buffer, BLOCK_SIZE, "Hamza # %d", i*i);
+           disk_stream.write(buffer, BLOCK_SIZE);
         }
         disk_stream.close();
     }
 
-
     if (!cache_init(cache_capacity, disk_file)) {
-        cerr << "Error initializing cache." << endl;
+        cerr << "Error initializing cache." << std::endl;
         return 1;
     }
     
-    const char* disk2_file = "disk2.txt";
-    const char* disk3_file = "disk3.txt";
-    // 2. Тестирование lab2_open
-    int fd = lab2_open(disk2_file);
-    if (fd == -1) {
-        cerr << "Error opening file." << endl;
-         cache_destroy();
-        return 1;
-    }
-    cout << "File opened, fd: " << fd << endl;
-    
-    fd = lab2_open(disk3_file);
-    if (fd == -1) {
-        cerr << "Error opening file." << endl;
-         cache_destroy();
-        return 1;
-    }
-    cout << "File opened, fd: " << fd << endl;
-    
-    fd = lab2_open(disk3_file);
-    if (fd == -1) {
-        cerr << "Error opening file." << endl;
-         cache_destroy();
-        return 1;
-    }
-    cout << "File opened, fd: " << fd << endl;
+    // 2. Тестирование cache_read
+    char buffer[BLOCK_SIZE];
+    bool success;
 
-
-    // 3. Тестирование lab2_write
-    char write_buffer[] = "Hello, I am Hamza Agaev!";
-    ssize_t bytes_written = lab2_write(fd, write_buffer, strlen(write_buffer));
-     if (bytes_written == -1) {
-       cerr << "Error writing to file." << std::endl;
-          lab2_close(fd);
-            cache_destroy();
-         return 1;
-     }
-     cout << "Bytes written: " << bytes_written << endl;
-
-    bytes_written = lab2_write(fd, write_buffer, strlen(write_buffer));
-     if (bytes_written == -1) {
-       cerr << "Error writing to file." << std::endl;
-          lab2_close(fd);
-            cache_destroy();
-         return 1;
-     }
-     cout << "Bytes written: " << bytes_written << endl;
-
-    bytes_written = lab2_write(fd, write_buffer, strlen(write_buffer));
-     if (bytes_written == -1) {
-       cerr << "Error writing to file." << std::endl;
-          lab2_close(fd);
-            cache_destroy();
-         return 1;
-     }
-     cout << "Bytes written: " << bytes_written << endl;
-
-    // 4. Тестирование lab2_read
-    char read_buffer[100];
-    ssize_t bytes_read = lab2_read(fd, read_buffer, strlen(write_buffer));
-      if (bytes_read == -1) {
-         cerr << "Error reading from file." << endl;
-         lab2_close(fd);
-         cache_destroy();
-         return 1;
-    }
-      cout << "Bytes read: " << bytes_read << endl;
-    
-      cout << "Data read: " << read_buffer << endl;
-      
-
-    // 5. Тестирование lab2_lseek
-//    off_t new_offset = lab2_lseek(fd, 5, 0);
-//    if (new_offset == -1) {
-//        std::cerr << "Error seeking file." << std::endl;
-//    } else {
-//        std::cout << "New offset: " << new_offset << std::endl;
-//    }
-
-     // 6. Тестирование lab2_read после lab2_lseek
-//    bytes_read = lab2_read(fd, read_buffer, strlen(write_buffer) - 5 );
-//    if (bytes_read == -1) {
-//        std::cerr << "Error reading from file after lseek." << std::endl;
-//         lab2_close(fd);
-//        cache_destroy();
-//          return 1;
-//    }
-//        std::cout << "Bytes read after seek: " << bytes_read << std::endl;
-//        std::cout << "Data read after seek: " << read_buffer << std::endl;
-
-  // 7. Тестирование lab2_fsync
-//    if (lab2_fsync(fd) == -1) {
-//        std::cerr << "Error synchronizing file." << std::endl;
-//        lab2_close(fd);
-//        cache_destroy();
-//          return 1;
-//    } else {
-//         std::cout << "File synchronized." << std::endl;
-//    }
-
-    // 8. Тестирование lab2_close
-    int f2 = lab2_close(fd);
-    if (f2 == -1) {
-        cerr << "Error closing file." << endl;
-        cache_destroy();
-        return 1;
+    // Test cache miss (block id = 0)
+    success = cache_read(0, buffer);
+    if (success) {
+      cout << "Read block 0: " << buffer << endl;
     } else {
-         cout << "File " << f2 << " closed." << endl;
+      cerr << "Error reading block 0." << endl;
     }
 
-    // 9. Очистка кэша
-      cache_destroy();
-      cout << "Cache destroyed." << endl;
+    // Test cache hit (block id = 0)
+    success = cache_read(0, buffer);
+     if (success) {
+        cout << "Read block 0 from cache: " << buffer << endl;
+    } else {
+        cerr << "Error reading block 0." << endl;
+    }
+
+    // Test cache miss with replacement (block id 1 and 2)
+    success = cache_read(1, buffer);
+    if (success) {
+        cout << "Read block 1: " << buffer << endl;
+    } else {
+        cerr << "Error reading block 1" << endl;
+    }
+
+    success = cache_read(2, buffer);
+    if (success) {
+      cout << "Read block 2: " << buffer << endl;
+    } else {
+      cerr << "Error reading block 2" << endl;
+    }
+
+     success = cache_read(3, buffer);
+    if (success) {
+       cout << "Read block 3: " << buffer << endl;
+    } else {
+       cerr << "Error reading block 3" << endl;
+    }
+
+
+      success = cache_read(0, buffer);
+    if (success) {
+      cout << "Read block 0 from cache (again): " << buffer << endl;
+    } else {
+      cerr << "Error reading block 0" << endl;
+    }
+    
+        // 2. Тестирование cache_write и cache_read (запись нового блока)
+    sprintf_s(buffer, BLOCK_SIZE, "New data for block 0");
+    success = cache_write(0, buffer); // Записываем новый блок 0
+     if (success) {
+         cout << "Write block 0 successfully." << endl;
+     } else {
+         cerr << "Error writing block 0" << endl;
+     }
+
+
+    success = cache_read(0, buffer); // Читаем блок 0 из кэша.
+     if (success) {
+        cout << "Read block 0 from cache (after write): " << buffer << endl;
+    } else {
+        cerr << "Error reading block 0" << endl;
+    }
+    
+
+    // Тестирование промаха и замены
+     success = cache_read(1, buffer);
+       if (success) {
+          cout << "Read block 1: " << buffer << endl;
+      } else {
+          cerr << "Error reading block 1." << endl;
+      }
+
+     success = cache_read(2, buffer);
+       if (success) {
+          cout << "Read block 2: " << buffer << endl;
+       } else {
+          cerr << "Error reading block 2" << endl;
+       }
+        success = cache_read(3, buffer);
+     if (success) {
+         cout << "Read block 3: " << buffer << endl;
+     } else {
+         cerr << "Error reading block 3." << endl;
+     }
+
+    
+    success = cache_write(1, buffer); // Записываем новый блок 1
+     if (success) {
+         cout << "Write block 1 successfully." << endl;
+     } else {
+         cerr << "Error writing block 1" << endl;
+     }
+
+    success = cache_read(1, buffer);
+      if (success) {
+        cout << "Read block 1 from cache (after write): " << buffer << endl;
+      } else {
+        cerr << "Error reading block 1." << endl;
+      }
+     
+     sprintf_s(buffer, BLOCK_SIZE, "PEnskoy Krutoy"); 
+     success = cache_write(5, buffer); // Записываем новый блок 1
+     if (success) {
+         cout << "Write block 5 successfully." << endl;
+     } else {
+         cerr << "Error writing block 5" << endl;
+     }
+
+    success = cache_read(5, buffer);
+      if (success) {
+        cout << "Read block 5 from cache (after write): " << buffer << endl;
+      } else {
+        cerr << "Error reading block 5." << endl;
+      }
+
+    // 3. Очистка кэша
+    cache_destroy();
+     
+    cout << "Cache destroyed." << endl;
 
     return 0;
 }
