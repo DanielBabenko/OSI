@@ -1,126 +1,368 @@
-#include <iostream>
-#include <fstream>
 #include <windows.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <iostream>
+#include <vector>
 #include "cache_lib.h"
 
 using namespace std;
 
+//int add(int a, int b) {
+//    return a + b;
+//}
+//
+//void greet(const char* name) {
+//    std::cout << "Hello, " << name << " , I believe in you!" << std::endl;
+//}
+
 #define BLOCK_SIZE 512
+#define MAX_OPEN_FILES 10
 
-int main() {
-    // 1. Инициализация кэша
-    const char* disk_file = "disk.bin";
-    const size_t cache_capacity = 3;
-    std::ofstream disk_stream(disk_file, std::ios::binary);
-    if (disk_stream.is_open()) {
-        char buffer[BLOCK_SIZE];
-        for (int i = 0; i < 10; i++) {
-            sprintf_s(buffer, BLOCK_SIZE, "Data for block %d", i);
-            disk_stream.write(buffer, BLOCK_SIZE);
+typedef struct CacheEntry {
+    int block_id; // ID странциы
+    char* data; // Данные
+    bool ref_bit; //Бит использования (для осуществления Clock)
+} CacheEntry;
+
+typedef struct Cache {
+    size_t capacity; //размер
+    CacheEntry* entries; //вместительность кэша
+    int clock_hand; // указатель ("стрелка часов")
+    size_t size; //текущий размер кэша
+    HANDLE mutex; //мьютекс
+} Cache;
+
+Cache* cache = nullptr;
+HANDLE disk_handle;
+
+bool cache_read(int block_id, void* buffer) {
+    cout << "Trying to read block " << block_id << endl;
+    // 1. Проверка на валидность кэша:
+    if (cache == nullptr) return false;
+
+    // 2. Захват мьютекса:
+    WaitForSingleObject(cache->mutex, INFINITE);
+
+    // 3. Поиск блока в кэше:
+    for (size_t i = 0; i < cache->size; ++i) {
+        if (cache->entries[i].block_id == block_id) {
+            // 4a. Кэш-хит:
+            cache->entries[i].ref_bit = true; // Устанавливаем бит использования
+            memcpy(buffer, cache->entries[i].data, BLOCK_SIZE); // Копируем данные в буфер
+            cout << "Block is currently in cache. " << endl;
+            ReleaseMutex(cache->mutex);
+            return true;
         }
-        disk_stream.close();
     }
 
+    // 5. Кэш-промах: (блок не найден в кэше)
+    DWORD bytesRead;
+    LARGE_INTEGER offset;
+    offset.QuadPart = (LONGLONG)block_id * BLOCK_SIZE;
 
-    if (!cache_init(cache_capacity, disk_file)) {
-        cerr << "Error initializing cache." << endl;
-        return 1;
+    // 6. Позиционируем файловый указатель:
+    SetFilePointerEx(disk_handle, //дескриптор файла, в нашем случае, "стрелка"
+                    offset, //смещение указателя
+                    NULL, //новый указатель позиции
+                    FILE_BEGIN); //точка отсчёта
+
+    // 7. Читаем данные с диска:
+    if(!ReadFile(disk_handle, buffer, BLOCK_SIZE, &bytesRead, NULL))
+    {
+        ReleaseMutex(cache->mutex);
+        return false;
     }
-    
-    const char* disk2_file = "disk2.bin";
-    const char* disk3_file = "disk3.bin";
-    // 2. Тестирование lab2_open
-    int fd = lab2_open(disk2_file);
-    if (fd == -1) {
-        cerr << "Error opening file." << endl;
-         cache_destroy();
-        return 1;
-    }
-    cout << "File opened, fd: " << fd << endl;
-    
-    fd = lab2_open(disk3_file);
-    if (fd == -1) {
-        cerr << "Error opening file." << endl;
-         cache_destroy();
-        return 1;
-    }
-    cout << "File opened, fd: " << fd << endl;
-    
-    fd = lab2_open(disk3_file);
-    if (fd == -1) {
-        cerr << "Error opening file." << endl;
-         cache_destroy();
-        return 1;
-    }
-    cout << "File opened, fd: " << fd << endl;
 
-
-    // 3. Тестирование lab2_write
-//    char write_buffer[] = "Hello, cached world!";
-//    ssize_t bytes_written = lab2_write(fd, write_buffer, strlen(write_buffer) );
-//     if (bytes_written == -1) {
-//       std::cerr << "Error writing to file." << std::endl;
-//          lab2_close(fd);
-//            cache_destroy();
-//         return 1;
-//     }
-//     std::cout << "Bytes written: " << bytes_written << std::endl;
-    // 4. Тестирование lab2_read
-//    char read_buffer[100];
-//    ssize_t bytes_read = lab2_read(fd, read_buffer, strlen(write_buffer) );
-//      if (bytes_read == -1) {
-//         std::cerr << "Error reading from file." << std::endl;
-//          lab2_close(fd);
-//            cache_destroy();
-//        return 1;
-//    }
-//      std::cout << "Bytes read: " << bytes_read << std::endl;
-//    
-//      std::cout << "Data read: " << read_buffer << std::endl;
-      
-
-    // 5. Тестирование lab2_lseek
-//    off_t new_offset = lab2_lseek(fd, 5, 0);
-//    if (new_offset == -1) {
-//        std::cerr << "Error seeking file." << std::endl;
-//    } else {
-//        std::cout << "New offset: " << new_offset << std::endl;
-//    }
-
-     // 6. Тестирование lab2_read после lab2_lseek
-//    bytes_read = lab2_read(fd, read_buffer, strlen(write_buffer) - 5 );
-//    if (bytes_read == -1) {
-//        std::cerr << "Error reading from file after lseek." << std::endl;
-//         lab2_close(fd);
-//        cache_destroy();
-//          return 1;
-//    }
-//        std::cout << "Bytes read after seek: " << bytes_read << std::endl;
-//        std::cout << "Data read after seek: " << read_buffer << std::endl;
-
-  // 7. Тестирование lab2_fsync
-//    if (lab2_fsync(fd) == -1) {
-//        std::cerr << "Error synchronizing file." << std::endl;
-//        lab2_close(fd);
-//        cache_destroy();
-//          return 1;
-//    } else {
-//         std::cout << "File synchronized." << std::endl;
-//    }
-
-    // 8. Тестирование lab2_close
-    int f2 = lab2_close(fd);
-    if (f2 == -1) {
-        cerr << "Error closing file." << endl;
-        cache_destroy();
-        return 1;
+    // 8. Размещение в кэше новой страницы:
+    if (cache->size < cache->capacity)
+    {
+        // 8a. Есть свободные места:
+        cout << "Current cache size: " << cache->size << endl;
+        cache->entries[cache->size].block_id = block_id; // Записываем block_id
+        cache->entries[cache->size].data = (char*)malloc(BLOCK_SIZE); // Выделяем память
+       if (cache->entries[cache->size].data == nullptr){
+            ReleaseMutex(cache->mutex); //Освобождаем мьютекс
+            return false; // Не удалось выделить память
+        }
+        memcpy(cache->entries[cache->size].data, buffer, BLOCK_SIZE); // Копируем данные в кэш
+        cache->entries[cache->size].ref_bit = true;  // Устанавливаем бит использования
+        cache->size++;  // Увеличиваем размер кэша
+        cout << "New block have been added in cache. " << endl;
+        cache->clock_hand = (cache->clock_hand + 1) % (cache->capacity);
+        cout << "Pointer current position: " << cache->clock_hand << endl;
     } else {
-         cout << "File " << f2 << " closed." << endl;
+         // 8b. Нет свободного места, используем Clock:
+        while (true) {
+             if (cache->entries[cache->clock_hand].ref_bit == true) {
+                cache->entries[cache->clock_hand].ref_bit = false;
+                cache->clock_hand = (cache->clock_hand + 1) % (cache->capacity);
+                cout << "Pointer current position: " << cache->clock_hand << endl;
+            } else {
+                free(cache->entries[cache->clock_hand].data);
+                 cache->entries[cache->clock_hand].block_id = block_id;
+                cache->entries[cache->clock_hand].data = (char*)malloc(BLOCK_SIZE);
+                 if (cache->entries[cache->clock_hand].data == nullptr){
+                       ReleaseMutex(cache->mutex);
+                       return false;
+                 }
+                  memcpy(cache->entries[cache->clock_hand].data, buffer, BLOCK_SIZE);
+                 cache->entries[cache->clock_hand].ref_bit = true;
+                 cout << "Cache block has been rewritten " << cache->clock_hand << endl;
+                 cache->clock_hand = (cache->clock_hand + 1) % cache->capacity;
+                 cout << "Pointer current position: " << cache->clock_hand << endl;
+                break;
+            }
+        }
+    }
+    ReleaseMutex(cache->mutex);
+    return true;
+}
+
+bool cache_write(int block_id, const void* buffer) {
+    cout << "Trying to write block " << block_id << endl;
+    // 1. Проверка на валидность кэша:
+    if (cache == nullptr) return false;
+
+    // 2. Захват мьютекса:
+    WaitForSingleObject(cache->mutex, INFINITE);
+
+    // 3. Поиск блока в кэше:
+    for (size_t i = 0; i < cache->size; ++i) {
+        if (cache->entries[i].block_id == block_id) {
+            cout << "Block is currently in cache. " << endl;
+            // 4a. Кэш-хит:
+            memcpy(cache->entries[i].data, buffer, BLOCK_SIZE);
+             // 5. Запись на диск:
+            LARGE_INTEGER offset;
+            offset.QuadPart = (LONGLONG)block_id * BLOCK_SIZE;
+           SetFilePointerEx(disk_handle, offset, NULL, FILE_BEGIN);
+             DWORD bytesWritten;
+              if (!WriteFile(disk_handle, buffer, BLOCK_SIZE, &bytesWritten, NULL))
+             {
+                  ReleaseMutex(cache->mutex);
+                 return false;
+            }
+             ReleaseMutex(cache->mutex);
+            return true;
+        }
     }
 
-    // 9. Очистка кэша
-      cache_destroy();
-      cout << "Cache destroyed." << endl;
+    // 6. Кэш-промах: (блок не найден в кэше)
+     // 7. Записываем данные на диск:
+    DWORD bytesWritten;
+    LARGE_INTEGER offset;
+    offset.QuadPart = (LONGLONG)block_id * BLOCK_SIZE;
+     SetFilePointerEx(disk_handle, offset, NULL, FILE_BEGIN);
+     if (!WriteFile(disk_handle, buffer, BLOCK_SIZE, &bytesWritten, NULL))
+    {
+        ReleaseMutex(cache->mutex);
+         return false;
+    }
 
-    return 0;
+    // 8. Размещение в кэше новой страницы:
+    if (cache->size < cache->capacity)
+    {
+        // 8a. Есть свободные места:
+        cout << "Current cache size: " << cache->size << endl;
+        cache->entries[cache->size].block_id = block_id;
+        cache->entries[cache->size].data = (char*)malloc(BLOCK_SIZE);
+         if (cache->entries[cache->size].data == nullptr){
+               ReleaseMutex(cache->mutex);
+               return false;
+        }
+        memcpy(cache->entries[cache->size].data, buffer, BLOCK_SIZE);
+         cache->entries[cache->size].ref_bit = true;
+         cache->size++;
+         cout << "New block have been added in cache. " << endl;
+         cache->clock_hand = (cache->clock_hand + 1) % (cache->capacity);
+         cout << "Pointer current position: " << cache->clock_hand << endl;
+     } else {
+          // 8b. Нет свободного места, используем Clock:
+          while (true) {
+            if (cache->entries[cache->clock_hand].ref_bit == true) {
+                cache->entries[cache->clock_hand].ref_bit = false; //занулить бит использования
+                 cache->clock_hand = (cache->clock_hand + 1) % (cache->capacity); //переместить указатель дальше
+                 cout << "Pointer current position: " << cache->clock_hand << endl;
+            } else {
+               //нашли элемент без бита использования, надо бы заменить
+               free(cache->entries[cache->clock_hand].data); // Освобождаем старые данные
+               cache->entries[cache->clock_hand].block_id = block_id; // Новый id
+               cache->entries[cache->clock_hand].data = (char*)malloc(BLOCK_SIZE);
+                if (cache->entries[cache->clock_hand].data == nullptr){
+                     ReleaseMutex(cache->mutex);
+                    return false;
+                }
+                 memcpy(cache->entries[cache->clock_hand].data, buffer, BLOCK_SIZE); // Копируем новые данные
+                cache->entries[cache->clock_hand].ref_bit = true;  // Устанавливаем бит использования
+                cout << "Cache block has been rewritten " << cache->clock_hand << endl;
+                cache->clock_hand = (cache->clock_hand + 1) % cache->capacity; // перемещаем указатель на следующий элемент
+                cout << "Pointer current position: " << cache->clock_hand << endl;
+                break;
+            }
+        }
+     }
+       ReleaseMutex(cache->mutex);
+    return true;
+}
+
+bool cache_init(size_t capacity, const char* disk_file) {
+    if (cache != nullptr) {
+        return false; // Кэш уже проинициализирован
+    }
+
+    cache = (Cache*)malloc(sizeof(Cache));
+    if (cache == nullptr) {
+         return false;
+    }
+    cache->capacity = capacity;
+    cache->entries = (CacheEntry*)malloc(sizeof(CacheEntry) * capacity);
+    if (cache->entries == nullptr) {
+        free(cache);
+        return false;
+    }
+    for (size_t i = 0; i < capacity; ++i) {
+        cache->entries[i].data = nullptr;
+    }
+    cache->clock_hand = 0;
+    cache->size = 0;
+    cache->mutex = CreateMutex(NULL, FALSE, NULL);
+    if (cache->mutex == NULL) {
+        free(cache->entries);
+        free(cache);
+        return false;
+    }
+    disk_handle = CreateFileA(disk_file, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (disk_handle == INVALID_HANDLE_VALUE) {
+        CloseHandle(cache->mutex);
+        free(cache->entries);
+        free(cache);
+        return false;
+    }
+
+    return true;
+}
+
+void cache_destroy() {
+    if (cache == nullptr) return;
+    WaitForSingleObject(cache->mutex, INFINITE);
+    for (size_t i = 0; i < cache->capacity; ++i) {
+         if (cache->entries[i].data != nullptr)
+             free(cache->entries[i].data);
+    }
+    free(cache->entries);
+    CloseHandle(disk_handle);
+    CloseHandle(cache->mutex);
+     free(cache);
+     cache = nullptr;
+}
+
+typedef struct OpenFileEntry {
+    HANDLE file_handle;
+    Cache* cache;
+    int file_id;
+    const char* file_path;
+    off_t file_offset;
+} OpenFileEntry;
+
+vector<OpenFileEntry> open_files;
+int file_id_counter = 0;
+
+int lab2_open(const char* path) {
+        // Проверяем, не открыт ли уже этот файл
+        for(const auto& file : open_files)
+        {
+            if (strcmp(file.file_path, path) == 0)
+            return file.file_id;
+        }
+
+        HANDLE file_handle = CreateFileA(path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+          if(file_handle == INVALID_HANDLE_VALUE)
+          {
+            cerr << "Error opening file: " << GetLastError() << endl;
+            return -1;
+          }
+
+        // Создаем новую запись
+        OpenFileEntry new_file;
+        new_file.file_handle = file_handle;
+        new_file.cache = cache; // Передаем указатель на кэш
+        new_file.file_id = file_id_counter++;
+        new_file.file_path = path;
+
+        open_files.push_back(new_file);
+        return new_file.file_id;
+
+}
+
+int lab2_close(int fd) {
+        for (auto it = open_files.begin(); it != open_files.end(); ++it)
+        {
+            if (it->file_id == fd)
+            {
+                 if (!CloseHandle(it->file_handle)) {
+                     return -1;
+                } else {
+                    open_files.erase(it);
+                    return fd;
+                }
+             }
+        }
+        return -1;
+}
+
+ssize_t lab2_read(int fd, void* buf, size_t count) {
+    for (auto& file : open_files) {
+          if(file.file_id == fd) {
+              
+                size_t total_read = 0;
+                while (total_read < count) {
+                       int block_id = file.file_offset / BLOCK_SIZE; // Определяем блок для чтения
+                       cout << "Count: " << count << endl;
+                       cout << "Block id: " << block_id << endl;
+                       
+                       size_t offset_in_block = file.file_offset % BLOCK_SIZE; // Смещение в блоке
+                      
+                       size_t read_size = min((size_t)(count - total_read), (size_t)(BLOCK_SIZE - offset_in_block)); // Сколько считать сейчас
+
+                         if (read_size == 0) break;
+
+                        char tmp_buffer[BLOCK_SIZE];
+                       if (!cache_read(block_id, tmp_buffer))
+                           return -1;
+
+                        memcpy((char*)buf + total_read, tmp_buffer, read_size);
+                       
+                        file.file_offset += read_size;
+                        total_read += read_size;
+                  
+                   }
+                 return total_read;
+           }
+        }
+
+      return -1;
+}
+
+ssize_t lab2_write(int fd, const void* buf, size_t count) {
+    for (auto& file : open_files) {
+       if (file.file_id == fd) {
+              size_t total_written = 0;
+              while(total_written < count) {
+                  int block_id = file.file_offset / BLOCK_SIZE;
+                   size_t offset_in_block = file.file_offset % BLOCK_SIZE;
+                    size_t write_size = min((size_t)(count - total_written), (size_t)(BLOCK_SIZE - offset_in_block));
+                
+                  if (write_size == 0) break;
+                    char tmp_buffer[BLOCK_SIZE];
+                   memcpy(tmp_buffer, (const char*)buf + total_written, write_size);
+                  if (!cache_write(block_id, tmp_buffer))
+                    return -1;
+                  file.file_offset += write_size;
+                    total_written += write_size;
+              }
+         return total_written;
+       }
+    }
+  return -1;
 }
