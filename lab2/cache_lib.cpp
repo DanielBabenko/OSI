@@ -310,3 +310,59 @@ int lab2_close(int fd) {
         }
         return -1;
 }
+
+ssize_t lab2_read(int fd, void* buf, size_t count) {
+    for (auto& file : open_files) {
+          if(file.file_id == fd) {
+              
+                size_t total_read = 0;
+                while (total_read < count) {
+                       int block_id = file.file_offset / BLOCK_SIZE; // Определяем блок для чтения
+                       cout << "Count: " << count << endl;
+                       cout << "Block id: " << block_id << endl;
+                       
+                       size_t offset_in_block = file.file_offset % BLOCK_SIZE; // Смещение в блоке
+                      
+                       size_t read_size = min((size_t)(count - total_read), (size_t)(BLOCK_SIZE - offset_in_block)); // Сколько считать сейчас
+
+                         if (read_size == 0) break;
+
+                        char tmp_buffer[BLOCK_SIZE];
+                       if (!cache_read(block_id, tmp_buffer))
+                           return -1;
+
+                        memcpy((char*)buf + total_read, tmp_buffer, read_size);
+                       
+                        file.file_offset += read_size;
+                        total_read += read_size;
+                  
+                   }
+                 return total_read;
+           }
+        }
+
+      return -1;
+}
+
+ssize_t lab2_write(int fd, const void* buf, size_t count) {
+    for (auto& file : open_files) {
+       if (file.file_id == fd) {
+              size_t total_written = 0;
+              while(total_written < count) {
+                  int block_id = file.file_offset / BLOCK_SIZE;
+                   size_t offset_in_block = file.file_offset % BLOCK_SIZE;
+                    size_t write_size = min((size_t)(count - total_written), (size_t)(BLOCK_SIZE - offset_in_block));
+                
+                  if (write_size == 0) break;
+                    char tmp_buffer[BLOCK_SIZE];
+                   memcpy(tmp_buffer, (const char*)buf + total_written, write_size);
+                  if (!cache_write(block_id, tmp_buffer))
+                    return -1;
+                  file.file_offset += write_size;
+                    total_written += write_size;
+              }
+         return total_written;
+       }
+    }
+  return -1;
+}
