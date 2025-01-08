@@ -5,7 +5,7 @@
 
 using namespace std;
 
-#define BLOCK_SIZE 512
+#define BLOCK_SIZE 1024
 
 int main() {
     // 1. Инициализация кэша
@@ -146,6 +146,56 @@ int main() {
       } else {
         cerr << "Error reading block 5." << endl;
       }
+      
+    off_t new_pos = cache_seek(2, 5, SEEK_SET); // перемещаем к позиции 5
+    if (new_pos == -1)
+     {
+        cout << "Error moving pointer 1\n";
+     }
+    else
+     {
+       cout << "New position of pointer 1: " << new_pos << endl;
+     }
+   
+    new_pos = cache_seek(2, 5, SEEK_CUR); // перемещаем ещё на 5 позиций
+    if (new_pos == -1)
+     {
+        cout << "Error moving pointer 2\n";
+     }
+    else
+     {
+       cout << "New position of pointer 2: " << new_pos << endl;
+     }
+
+    new_pos = cache_seek(2, -3, SEEK_CUR); // перемещаем на 3 позиции назад
+     if (new_pos == -1)
+     {
+        cout << "Error moving pointer 3\n";
+     }
+    else
+     {
+       cout << "New position of pointer 3: " << new_pos << endl;
+     }
+   
+     new_pos = cache_seek(2, 8, SEEK_END); // перемещаем к концу -1
+     if (new_pos == -1)
+     {
+        cout << "Error moving pointer 4\n";
+     }
+    else
+     {
+       cout << "New position of pointer 4: " << new_pos << endl;
+     }
+
+    new_pos = cache_seek(1, 5, SEEK_SET); // попробуем блок, которого нет в кэше
+     if (new_pos == -1)
+     {
+        cout << "New position of pointer 5: " << new_pos << endl;
+     }
+    else
+     {
+       cout << "Error moving pointer 5\n";
+     }
 
     // 3. Очистка кэша
     cache_destroy();
