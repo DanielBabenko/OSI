@@ -129,9 +129,7 @@ bool cache_write(int block_id, const void* buffer) {
             cout << "Block is currently in cache. " << endl;
             // 4a. Кэш-хит:
             size_t bytes_to_write = min((size_t) BLOCK_SIZE, (size_t)(BLOCK_SIZE - cache->entries[i].current_position));
-            cout << bytes_to_write << endl;
             memcpy(cache->entries[i].data + cache->entries[i].current_position, buffer, bytes_to_write); // Копируем данные в буфер
-            //memcpy(cache->entries[i].data, buffer, BLOCK_SIZE);
              // 5. Запись на диск:
             LARGE_INTEGER offset;
             offset.QuadPart = (LONGLONG)block_id * BLOCK_SIZE;
@@ -436,7 +434,7 @@ off_t lab2_lseek(int fd, off_t offset, int whence) {
                 file.file_offset = new_position;
             } else if (whence == SEEK_END) {
                 if (offset < 0) return -1;
-                file.file_offset = BLOCK_SIZE + offset;  //Проверка на выход за границы файла.
+                file.file_offset = BLOCK_SIZE - offset;  //Проверка на выход за границы файла.
                 if (file.file_offset > BLOCK_SIZE) file.file_offset = BLOCK_SIZE;   //Не выходим за размер файла.
             } else {
                 return -1;
