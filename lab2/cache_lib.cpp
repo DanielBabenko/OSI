@@ -223,7 +223,6 @@ off_t cache_seek(int block_id, off_t offset, int whence) {
                     return -1;
                 }
                 new_position = entry->current_position = offset;
-                cout << "CURRENT OFFSET - 2: " << new_position << endl;
             }
             
             else if (whence == SEEK_CUR) {
@@ -444,7 +443,6 @@ off_t lab2_lseek(int fd, off_t offset, int whence) {
             }
             
             int block_id = file.file_dragging / BLOCK_SIZE;
-            cout << "CURRENT OFFSET: " << file.file_offset << endl;
             if ((cache_seek(block_id, offset, whence)) != file.file_offset) return -1;
             
             return file.file_offset;
