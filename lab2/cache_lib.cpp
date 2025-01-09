@@ -12,15 +12,15 @@ using namespace std;
 #define MAX_OPEN_FILES 10
 
 typedef struct CacheEntry {
-    int block_id; // ID странциы
+    int block_id; // ID страницы
     char* data; // Данные
     bool ref_bit; //Бит использования (для осуществления Clock)
     size_t current_position; // Текущая позиция указателя внутри блока
 } CacheEntry;
 
 typedef struct Cache {
-    size_t capacity; //размер
-    CacheEntry* entries; //вместительность кэша
+    size_t capacity; //вместительность кэша
+    CacheEntry* entries; //блоки кэша
     int clock_hand; // указатель ("стрелка часов")
     size_t size; //текущий размер кэша
     HANDLE mutex; //мьютекс
