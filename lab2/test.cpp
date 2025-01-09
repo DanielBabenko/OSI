@@ -5,16 +5,12 @@
 
 using namespace std;
 
-#define BLOCK_SIZE 512
+#define BLOCK_SIZE 1024
 
 int main() {
-//    int result = add(8, 3);
-//    cout << "8 + 3 = " << result << std::endl;
-//    greet("Daniel");
-    
     // 1. Инициализация кэша
     const char* disk_file = "disk.bin"; // Имя файла, имитирующего диск
-    const size_t cache_capacity = 10;
+    const size_t cache_capacity = 3;
 
     // Create dummy disk file
     ofstream disk_stream(disk_file, ios::binary);
@@ -27,12 +23,11 @@ int main() {
         disk_stream.close();
     }
 
-
     if (!cache_init(cache_capacity, disk_file)) {
         cerr << "Error initializing cache." << std::endl;
         return 1;
     }
-
+    
     // 2. Тестирование cache_read
     char buffer[BLOCK_SIZE];
     bool success;
@@ -136,6 +131,71 @@ int main() {
       } else {
         cerr << "Error reading block 1." << endl;
       }
+     
+     sprintf_s(buffer, BLOCK_SIZE, "PEnskoy Krutoy"); 
+     success = cache_write(5, buffer); // Записываем новый блок 1
+     if (success) {
+         cout << "Write block 5 successfully." << endl;
+     } else {
+         cerr << "Error writing block 5" << endl;
+     }
+
+    success = cache_read(5, buffer);
+      if (success) {
+        cout << "Read block 5 from cache (after write): " << buffer << endl;
+      } else {
+        cerr << "Error reading block 5." << endl;
+      }
+      
+    off_t new_pos = cache_seek(2, 5, SEEK_SET); // перемещаем к позиции 5
+    if (new_pos == -1)
+     {
+        cout << "Error moving pointer 1\n";
+     }
+    else
+     {
+       cout << "New position of pointer 1: " << new_pos << endl;
+     }
+   
+    new_pos = cache_seek(2, 5, SEEK_CUR); // перемещаем ещё на 5 позиций
+    if (new_pos == -1)
+     {
+        cout << "Error moving pointer 2\n";
+     }
+    else
+     {
+       cout << "New position of pointer 2: " << new_pos << endl;
+     }
+
+    new_pos = cache_seek(2, -3, SEEK_CUR); // перемещаем на 3 позиции назад
+     if (new_pos == -1)
+     {
+        cout << "Error moving pointer 3\n";
+     }
+    else
+     {
+       cout << "New position of pointer 3: " << new_pos << endl;
+     }
+   
+     new_pos = cache_seek(2, 8, SEEK_END); // перемещаем к концу -1
+     if (new_pos == -1)
+     {
+        cout << "Error moving pointer 4\n";
+     }
+    else
+     {
+       cout << "New position of pointer 4: " << new_pos << endl;
+     }
+
+    new_pos = cache_seek(1, 5, SEEK_SET); // попробуем блок, которого нет в кэше
+     if (new_pos == -1)
+     {
+        cout << "New position of pointer 5: " << new_pos << endl;
+     }
+    else
+     {
+       cout << "Error moving pointer 5\n";
+     }
 
     // 3. Очистка кэша
     cache_destroy();
