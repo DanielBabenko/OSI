@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <linux/fs.h>
 #include <sys/stat.h>
+#include "iostat_data.h"
 
 #define IOCTL_GET_IOSTAT _IOWR('k', 0, struct iostat_data)
 #define BDEVNAME_SIZE 256
