@@ -11,14 +11,6 @@
 #define IOCTL_GET_IOSTAT _IOWR('k', 0, struct iostat_data)
 #define BDEVNAME_SIZE 256
 
-struct iostat_data {
-    unsigned long long read_sectors;
-    unsigned long long write_sectors;
-    unsigned long long read_ios;
-    unsigned long long write_ios;
-    char path[BDEVNAME_SIZE];
-};
-
 int main(int argc, char *argv[]) {
     int fd;
     struct iostat_data data;
