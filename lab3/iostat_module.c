@@ -10,6 +10,7 @@
 #include <linux/blkdev.h>
 #include <linux/timekeeping.h>
 #include <linux/device.h> // Для device_create
+#include "iostat_data.h"
 
 // ioctl commands
 #define IOCTL_GET_IOSTAT _IOWR('k', 0, struct iostat_data)
