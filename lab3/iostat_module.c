@@ -2,266 +2,167 @@
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-#include <linux/device.h>
 #include <linux/uaccess.h>
 #include <linux/ioctl.h>
+#include <linux/sched.h>
+#include <linux/pid.h>
 #include <linux/slab.h>
 #include <linux/blkdev.h>
-#include <linux/string.h>
-#include <linux/seq_file.h>
-#include <linux/kdev_t.h>
-#include <linux/stat.h>
-#include "iostat_data.h"
+#include <linux/timekeeping.h>
+#include <linux/device.h> // Для device_create
 
+// ioctl commands
 #define IOCTL_GET_IOSTAT _IOWR('k', 0, struct iostat_data)
-#define SYSFS_PATH_MAX 256
-#define BDEVNAME_SIZE 256
 
-static dev_t dev_num;
-static struct class* dev_class;
-static struct cdev cdev;
-static struct device* device;
+// Function prototypes
+static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+static int my_open(struct inode *inode, struct file *file);
+static int my_release(struct inode *inode, struct file *file);
+static int find_iostat_for_process(pid_t pid, struct iostat_data *data);
 
-// static int read_proc_diskstats(const char* device_name, unsigned long long *values) {
-//     struct file *f;
-//     char buf[4096];
-//     int ret, i;
-//     loff_t pos = 0;
-//     char *line, *token, *line_copy;
-//     char disk_name[256];
-//     bool found = false;
-//     char *buf_ptr; // <-- Added pointer to track position in buf
+//Device stuff
+#define DEVICE_NAME "my_iostat"
+#define CLASS_NAME "my_iostat_class"
 
-//     f = filp_open("/proc/diskstats", O_RDONLY, 0);
-//     if (IS_ERR(f)) {
-//         printk(KERN_ERR "iostat_module: Error opening /proc/diskstats\n");
-//         return -PTR_ERR(f);
-//     }
+static int major_num;
+static struct class *char_class;
+static struct cdev char_device;
+static struct device *char_device_ptr;
 
-//     ret = kernel_read(f, buf, sizeof(buf) - 1, &pos);
-//     if (ret < 0) {
-//         printk(KERN_ERR "iostat_module: Error reading /proc/diskstats\n");
-//         filp_close(f, NULL);
-//         return ret;
-//     }
-//     buf[ret] = '\0';
+// File operations structure
+static struct file_operations fops = {
+    .open = my_open,
+    .release = my_release,
+    .unlocked_ioctl = my_ioctl,
+};
 
-//     buf_ptr = buf; // <-- Initialize the pointer to the beginning of the buffer
-
-//     while ((line = strsep(&buf_ptr, "\n")) != NULL) { // <-- Use buf_ptr instead of &buf
-//         if (strlen(line) == 0) continue;
-
-//         line_copy = kstrdup(line, GFP_KERNEL);
-//         if (!line_copy) {
-//             filp_close(f, NULL);
-//             return -ENOMEM;
-//         }
-
-//         i = 0;
-//         token = line_copy;
-//         while ((token = strsep(&line_copy, " ")) != NULL) {
-//              if (strlen(token) == 0) continue;
-//              if (i == 2) {
-//                  strncpy(disk_name, token, sizeof(disk_name) - 1);
-//                  disk_name[sizeof(disk_name) - 1] = '\0';
-//                  if (strcmp(disk_name, device_name) == 0) {
-//                      found = true;
-//                  }
-//                 break;
-//              }
-//              if(found && i >= 3 && i < 14) {
-//                 values[i -3] = simple_strtoull(token, NULL, 10);
-//             }
-//              i++;
-//          }
-//         kfree(line_copy);
-//          if (found) break;
-//     }
-
-//     filp_close(f, NULL);
-
-//     if (!found) {
-//         printk(KERN_ERR "iostat_module: Device %s not found in /proc/diskstats\n", device_name);
-//         return -ENODEV;
-//     }
-//     return 0;
-// }
-
-
-// static long device_ioctl(struct file* file, unsigned int cmd, unsigned long arg) {
-//     struct iostat_data data;
-//     struct block_device *bdev = NULL;
-//     int ret = 0;
-//     char device_name[256];
-
-//      if (_IOC_TYPE(cmd) != 'k' || _IOC_NR(cmd) != 0) {
-//         return -ENOTTY;
-//     }
-
-//     if (cmd == IOCTL_GET_IOSTAT) {
-//         if (copy_from_user(&data, (struct iostat_data __user *)arg, sizeof(data))) {
-//              return -EFAULT;
-//         }
-        
-//          bdev = blkdev_get_by_path(data.path, FMODE_READ | FMODE_WRITE, NULL);
-//          if (IS_ERR(bdev)) {
-//            return PTR_ERR(bdev);
-//           }
-
-//         strncpy(device_name, bdev->bd_disk->disk_name, sizeof(device_name) -1);
-//            device_name[sizeof(device_name) -1] = '\0';
-
-//         unsigned long long values[11];
-//         ret = read_proc_diskstats(device_name, values);
-//         if(ret < 0) {
-//             goto out;
-//         }
-//         data.read_ios = values[0];
-//         data.read_sectors = values[2];
-//         data.write_ios = values[4];
-//         data.write_sectors = values[6];
-
-//          if (copy_to_user((struct iostat_data __user *)arg, &data, sizeof(data))) {
-//             ret = -EFAULT;
-//             goto out;
-//        }
-//       out:
-//         blkdev_put(bdev, FMODE_READ);
-//         return ret;
-//     }
-//     return -ENOTTY;
-// }
-
-
-static int read_sysfs_file(const char* path, unsigned long long* value) {
-    struct file* f = filp_open(path, O_RDONLY, 0);
-    char buf[32];
-    int ret = 0;
-    loff_t pos = 0;
-    if (IS_ERR(f)) {
-        return -PTR_ERR(f);
-    }
-
-    ret = kernel_read(f, buf, sizeof(buf)-1, &pos);
-    printk(KERN_INFO "OK\n");
-    printk(KERN_INFO "iRet: %d\n", ret);
-    if (ret < 0) {
-        filp_close(f, NULL);
-        return ret;
-    }
-    buf[ret] = '\0';
-    *value = simple_strtoull(buf, NULL, 10);
-    filp_close(f, NULL);
+// Device Open Method
+static int my_open(struct inode *inode, struct file *file) {
+    printk(KERN_INFO "%s: Device opened\n", DEVICE_NAME);
     return 0;
 }
 
-static long device_ioctl(struct file* file, unsigned int cmd, unsigned long arg) {
-    struct iostat_data data;
-    struct block_device *bdev = NULL;
-    char sysfs_path[SYSFS_PATH_MAX];
-    int ret = 0;
-
-     if (_IOC_TYPE(cmd) != 'k' || _IOC_NR(cmd) != 0) {
-        return -ENOTTY;
-    }
-
-     if (cmd == IOCTL_GET_IOSTAT) {
-        if (copy_from_user(&data, (struct iostat_data __user *)arg, sizeof(data))) {
-             return -EFAULT;
-        }
-
-        bdev = blkdev_get_by_path(data.path, FMODE_READ | FMODE_WRITE, NULL);
-        if (IS_ERR(bdev)) {
-           return PTR_ERR(bdev);
-        }
-
-        printk(KERN_INFO "iostat_module: block device name: %s\n", bdev->bd_disk->disk_name);
-        snprintf(sysfs_path, SYSFS_PATH_MAX, "/sys/block/%s/stat", bdev->bd_disk->disk_name);
-         
-        unsigned long long values[11];
-
-         ret = read_sysfs_file(sysfs_path, &values[0]);
-         if(ret < 0) {
-              goto out;
-         }
-
-          data.read_ios = values[0];
-          data.read_sectors = values[2];
-          data.write_ios = values[4];
-          data.write_sectors = values[6];
-
-
-         if (copy_to_user((struct iostat_data __user *)arg, &data, sizeof(data))) {
-              ret = -EFAULT;
-              goto out;
-         }
-
-
-      out:
-           blkdev_put(bdev, FMODE_READ);
-           return ret;
-
-    }
-    return -ENOTTY;
+// Device Close Method
+static int my_release(struct inode *inode, struct file *file) {
+    printk(KERN_INFO "%s: Device closed\n", DEVICE_NAME);
+    return 0;
 }
- 
-static int device_open(struct inode* inode, struct file* file) { 
-    printk(KERN_INFO "Device opened.\n"); 
-    return 0; 
-} 
- 
-static int device_release(struct inode* inode, struct file* file) { 
-    printk(KERN_INFO "Device closed.\n"); 
-    return 0; 
-} 
 
-static const struct file_operations fops = { 
-    .owner = THIS_MODULE, 
-    .open = device_open, 
-    .release = device_release, 
-    .unlocked_ioctl = device_ioctl, 
-}; 
-  
-static int __init my_module_init(void) { 
-    if (alloc_chrdev_region(&dev_num, 0, 1, "iostat_device") < 0) { 
-        return -1; 
-    } 
- 
-    if ((dev_class = class_create(THIS_MODULE, "iostat_device_class")) == NULL) { 
-        unregister_chrdev_region(dev_num, 1); 
-        return -1; 
-    } 
- 
-    if ((device = device_create(dev_class, NULL, dev_num, NULL, "iostat_device")) == NULL) { 
-        class_destroy(dev_class); 
-        unregister_chrdev_region(dev_num, 1); 
-        return -1; 
-    } 
- 
-    cdev_init(&cdev, &fops); 
-    if (cdev_add(&cdev, dev_num, 1) < 0) { 
-        device_destroy(dev_class, dev_num); 
-        class_destroy(dev_class); 
-        unregister_chrdev_region(dev_num, 1); 
-        return -1; 
-    } 
- 
-    printk(KERN_INFO "Module loaded!\n"); 
-    return 0; 
-} 
-  
-static void __exit my_module_exit(void) { 
-    cdev_del(&cdev); 
-    device_destroy(dev_class, dev_num); 
-    class_destroy(dev_class); 
-    unregister_chrdev_region(dev_num, 1);
+// IOCTL Handler
+static long my_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+    struct iostat_data data;
+    pid_t pid;
+    int result;
 
-    printk(KERN_INFO "Module unloaded!\n"); 
-} 
- 
-module_init(my_module_init); 
-module_exit(my_module_exit); 
- 
-MODULE_LICENSE("GPL"); 
-MODULE_AUTHOR("Daniel"); 
-MODULE_DESCRIPTION("IOStat Kernel Module");
+    switch (cmd) {
+        case IOCTL_GET_IOSTAT:
+            if (copy_from_user(&data, (struct iostat_data __user *)arg, sizeof(data))) {
+                return -EFAULT;
+            }
+            result = find_iostat_for_process(data.pid, &data);
+             if (result == 0)
+             {
+                 if (copy_to_user((struct iostat_data *)arg, &data, sizeof(data))) {
+                   printk(KERN_ERR "%s: Failed to copy iostat data to user\n", DEVICE_NAME);
+                   return -EFAULT;
+                 }
+             }
+            return result;
+
+        default:
+            return -ENOTTY;
+    }
+}
+
+// Get iostat information for specified process
+static int find_iostat_for_process(pid_t pid, struct iostat_data *data) {
+
+    struct task_struct *task;
+    struct pid *task_pid;
+
+    if (!data)
+        return -EINVAL;
+    task_pid = find_get_pid(pid);
+
+    if (!task_pid) {
+        // return -ESRCH;
+        int i;
+        for (i = 0; i < 10000; i++){
+            task_pid = find_get_pid(i);
+            if (task_pid){
+                printk(KERN_INFO "GOOOOAL %d \n", i);
+            }
+        }
+        printk(KERN_ERR "%s: No process with pid %d found\n", DEVICE_NAME, pid);
+        return -ESRCH;
+    }
+    task = pid_task(task_pid, PIDTYPE_PID);
+    put_pid(task_pid);
+
+    if (!task) {
+        printk(KERN_ERR "%s: Failed to get task structure for pid %d\n", DEVICE_NAME, pid);
+        return -ESRCH;
+    }
+
+    printk(KERN_INFO "LIKE ME %llu \n", task->ioac.read_bytes);
+    data->bytes_read = task->ioac.read_bytes;
+    data->bytes_write = task->ioac.write_bytes;
+    data->read_time_ns = task->ioac.syscr;
+    data->write_time_ns = task->ioac.syscw;
+
+    return 0;
+}
+
+static int __init my_module_init(void) {
+    printk(KERN_INFO "%s: Module Loaded\n", DEVICE_NAME);
+    major_num = register_chrdev(0, DEVICE_NAME, &fops);
+    if (major_num < 0) {
+        printk(KERN_ALERT "%s: Failed to register a major number\n", DEVICE_NAME);
+        return major_num;
+    }
+    printk(KERN_INFO "%s: Registered correctly with major number %d\n", DEVICE_NAME, major_num);
+    char_class = class_create(THIS_MODULE, CLASS_NAME);
+    if (IS_ERR(char_class)) {
+        unregister_chrdev(major_num, DEVICE_NAME);
+        printk(KERN_ALERT "%s: Failed to register device class\n", DEVICE_NAME);
+        return PTR_ERR(char_class);
+    }
+    printk(KERN_INFO "%s: Device class registered correctly\n", DEVICE_NAME);
+
+    cdev_init(&char_device, &fops);
+    if (cdev_add(&char_device, MKDEV(major_num, 0), 1) < 0) {
+        class_destroy(char_class);
+        unregister_chrdev(major_num, DEVICE_NAME);
+        printk(KERN_ALERT "%s: Failed to register device driver\n", DEVICE_NAME);
+        return -1;
+    }
+        printk(KERN_INFO "%s: Device class created correctly\n", DEVICE_NAME);
+
+    // Create device file
+    char_device_ptr = device_create(char_class, NULL, MKDEV(major_num, 0), NULL, DEVICE_NAME);
+    if (IS_ERR(char_device_ptr))
+    {
+        cdev_del(&char_device);
+        class_destroy(char_class);
+        unregister_chrdev(major_num, DEVICE_NAME);
+        printk(KERN_ALERT "%s: Failed to create the device file\n", DEVICE_NAME);
+        return PTR_ERR(char_device_ptr);
+    }
+    printk(KERN_INFO "%s: Device file created successfully\n", DEVICE_NAME);
+    return 0;
+}
+
+static void __exit my_module_exit(void) {
+    device_destroy(char_class, MKDEV(major_num, 0));
+    cdev_del(&char_device);
+    class_destroy(char_class);
+    unregister_chrdev(major_num, DEVICE_NAME);
+    printk(KERN_INFO "%s: Module Unloaded\n", DEVICE_NAME);
+}
+
+module_init(my_module_init);
+module_exit(my_module_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Daniel");
+MODULE_DESCRIPTION("IO Stat Module");
