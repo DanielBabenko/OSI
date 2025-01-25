@@ -153,12 +153,12 @@ static void __exit my_module_exit(void) {
     class_destroy(dev_class); 
     unregister_chrdev_region(dev_num, 1);
 
-printk(KERN_INFO "Module unloaded!\n"); 
+    printk(KERN_INFO "Module unloaded!\n"); 
 } 
  
 module_init(my_module_init); 
 module_exit(my_module_exit); 
  
 MODULE_LICENSE("GPL"); 
-MODULE_AUTHOR("Your Name"); 
+MODULE_AUTHOR("Daniel"); 
 MODULE_DESCRIPTION("IOStat Kernel Module");
