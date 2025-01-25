@@ -11,18 +11,11 @@
 #include <linux/seq_file.h>
 #include <linux/kdev_t.h>
 #include <linux/stat.h>
+#include "iostat_data.h"
 
 #define IOCTL_GET_IOSTAT _IOWR('k', 0, struct iostat_data)
 #define SYSFS_PATH_MAX 256
 #define BDEVNAME_SIZE 256
-
-struct iostat_data {
-    unsigned long long read_sectors;
-    unsigned long long write_sectors;
-    unsigned long long read_ios;
-    unsigned long long write_ios;
-    char path[BDEVNAME_SIZE];
-};
 
 static dev_t dev_num;
 static struct class* dev_class;
