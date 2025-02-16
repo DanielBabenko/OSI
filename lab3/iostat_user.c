@@ -2,53 +2,71 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <string.h>
 #include <sys/ioctl.h>
+#include <string.h>
 #include <errno.h>
-#include <linux/fs.h>
-#include <sys/stat.h>
+#include <sys/types.h>
 #include "iostat_data.h"
 
+// ioctl commands
 #define IOCTL_GET_IOSTAT _IOWR('k', 0, struct iostat_data)
-#define BDEVNAME_SIZE 256
+
+// Структура для передачи данных пользователю
+struct iostat_data {
+    pid_t pid;
+    unsigned long long bytes_read;
+    unsigned long long bytes_write;
+    unsigned long long read_time_ns;
+    unsigned long long write_time_ns;
+};
 
 int main(int argc, char *argv[]) {
     int fd;
     struct iostat_data data;
-    struct stat st;
+    pid_t pid;
+    char *endptr;
 
-    if(argc != 2){
-        fprintf(stderr, "Usage: %s <device_node>\n", argv[0]);
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <PID>\n", argv[0]);
         return 1;
     }
-    
-    if (stat(argv[1], &st) < 0) {
-        fprintf(stderr, "iostat_user: invalid device path\n");
-        return 1;
-    }
-    
-    strncpy(data.path, argv[1], sizeof(data.path)-1);
-    data.path[sizeof(data.path) - 1] = '\0';
 
-    fd = open("/dev/iostat_device", O_RDONLY);
+    pid = strtol(argv[1], &endptr, 10);
+
+    if (*endptr != '\0' || errno == ERANGE) {
+         fprintf(stderr, "Invalid PID: %s\n", argv[1]);
+         return 1;
+    }
+
+    data.pid = pid;
+
+    // Open the device
+    fd = open("/dev/my_iostat", O_RDWR);
     if (fd < 0) {
-        fprintf(stderr, "Failed to open device: %s\n", strerror(errno));
+        perror("Failed to open device");
         return 1;
-    } else {
-        printf("Success in opening device\n");
     }
-    
+
+    // // Send the ioctl to kernel module
+    // if (ioctl(fd, IOCTL_GET_IOSTAT, &pid) < 0) {
+    //     printf("Ola");
+    //     perror("Failed to send ioctl");
+    //     close(fd);
+    //     return 1;
+    // }
+
     if (ioctl(fd, IOCTL_GET_IOSTAT, &data) < 0) {
-        fprintf(stderr, "ioctl failed: %s\n", strerror(errno));
+        printf("Aloha!");
+        perror("Failed to receive ioctl");
         close(fd);
         return 1;
     }
 
-    printf("I/O Statistics:\n");
-    printf("  Read Sectors: %llu\n", data.read_sectors);
-    printf("  Write Sectors: %llu\n", data.write_sectors);
-    printf("  Read IOs:     %llu\n", data.read_ios);
-    printf("  Write IOs:    %llu\n", data.write_ios);
+    printf("Process: (PID: %d)\n", pid);
+    printf("Bytes read: %llu\n", data.bytes_read);
+    printf("Bytes written: %llu\n", data.bytes_write);
+    printf("Read time (ns): %llu\n", data.read_time_ns);
+    printf("Write time (ns): %llu\n", data.write_time_ns);
     
     close(fd);
     return 0;
